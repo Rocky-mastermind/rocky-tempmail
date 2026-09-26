@@ -1,0 +1,13 @@
+{
+  "name": "rocky-tempmail",
+  "version": "4.0.0",
+  "description": "Rocky Temp Mail API - auto generate temp email & fetch inbox",
+  "main": "index.js",
+  "dependencies": {
+    "axios": "^1.7.7",
+    "@vercel/kv": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
