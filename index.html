@@ -3,33 +3,142 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Rocky Temp Mail API</title>
+<title>Rocky Temp Mail</title>
 <style>
-  body { background:#0d1117; color:#e6edf3; font-family:'Segoe UI',sans-serif; text-align:center; padding:40px 16px; }
-  img.avatar { width:110px; height:110px; border-radius:50%; object-fit:cover; border:3px solid #58a6ff; }
-  h1 { margin-top:16px; }
-  .card { background:#161b22; border:1px solid #30363d; border-radius:12px; padding:20px; max-width:640px; margin:24px auto; text-align:left; }
-  code { background:#21262d; padding:2px 6px; border-radius:6px; }
-  a { color:#58a6ff; }
+  :root{ --accent:#58a6ff; --accent2:#a371f7; }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; min-height:100vh; font-family:'Segoe UI',sans-serif; color:#e6edf3;
+    background:linear-gradient(-45deg,#0d1117,#161b22,#1a1033,#0d1117);
+    background-size:400% 400%; animation:gradientMove 14s ease infinite;
+    display:flex; flex-direction:column; align-items:center; padding:40px 16px;
+    overflow-x:hidden;
+  }
+  @keyframes gradientMove{
+    0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%}
+  }
+  .blob{ position:fixed; width:340px; height:340px; border-radius:50%; filter:blur(90px); opacity:.35; z-index:0; }
+  .blob1{ background:var(--accent); top:-80px; left:-80px; animation:float1 10s ease-in-out infinite; }
+  .blob2{ background:var(--accent2); bottom:-100px; right:-60px; animation:float2 12s ease-in-out infinite; }
+  @keyframes float1{ 0%,100%{transform:translate(0,0)} 50%{transform:translate(60px,40px)} }
+  @keyframes float2{ 0%,100%{transform:translate(0,0)} 50%{transform:translate(-50px,-30px)} }
+
+  .avatar{ width:110px; height:110px; border-radius:50%; object-fit:cover; border:3px solid var(--accent);
+    box-shadow:0 0 25px rgba(88,166,255,.5); z-index:1; }
+  h1{ margin:16px 0 4px; z-index:1; }
+  p.sub{ opacity:.75; margin:0 0 24px; z-index:1; }
+
+  .card{ background:rgba(22,27,34,.85); backdrop-filter:blur(8px); border:1px solid #30363d;
+    border-radius:16px; padding:22px; max-width:520px; width:100%; z-index:1; box-shadow:0 8px 30px rgba(0,0,0,.35); }
+
+  select,button{ padding:10px 14px; border-radius:10px; border:1px solid #30363d; font-size:15px; }
+  select{ background:#0d1117; color:#e6edf3; }
+  button{ background:linear-gradient(90deg,var(--accent),var(--accent2)); color:#fff; border:none; cursor:pointer;
+    font-weight:600; transition:transform .15s; }
+  button:hover{ transform:translateY(-2px); }
+  button:disabled{ opacity:.5; cursor:not-allowed; transform:none; }
+
+  .row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .email-box{ margin-top:16px; background:#0d1117; border:1px dashed var(--accent); border-radius:10px;
+    padding:14px; display:flex; justify-content:space-between; align-items:center; word-break:break-all; }
+  .status{ margin-top:14px; font-size:14px; opacity:.8; display:flex; align-items:center; gap:8px; }
+  .dot{ width:8px; height:8px; border-radius:50%; background:var(--accent); animation:pulse 1.2s infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1} 50%{opacity:.2} }
+
+  .mail{ margin-top:16px; background:#0d1117; border:1px solid #30363d; border-radius:10px; padding:14px; text-align:left; }
+  .mail h4{ margin:0 0 6px; color:var(--accent); }
+  .mail small{ opacity:.6; }
+  footer{ margin-top:26px; opacity:.5; font-size:13px; z-index:1; }
 </style>
 </head>
 <body>
+  <div class="blob blob1"></div>
+  <div class="blob blob2"></div>
+
   <img class="avatar" src="https://i.imgur.com/EjBkf7Q.jpeg" alt="Rocky" />
-  <h1>📧 Rocky Temp Mail API</h1>
-  <p>Auto temp email generator &amp; inbox fetcher</p>
+  <h1>📧 Rocky Temp Mail</h1>
+  <p class="sub">Generate a temp email and watch the inbox live</p>
 
   <div class="card">
-    <h3>Generate address</h3>
-    <code>GET /api/address?providers=gmail|outlook|hotmail|edu</code>
-    <p>Returns: <code>{ "email": "...", "provider": "..." }</code></p>
+    <div class="row">
+      <select id="provider">
+        <option value="gmail">Gmail</option>
+        <option value="outlook">Outlook</option>
+        <option value="hotmail">Hotmail</option>
+        <option value="edu">Edu</option>
+      </select>
+      <button id="genBtn" onclick="generate()">Generate Email</button>
+    </div>
+
+    <div id="emailBox" class="email-box" style="display:none">
+      <span id="emailText"></span>
+      <button onclick="copyEmail()" style="padding:6px 10px;">Copy</button>
+    </div>
+
+    <div id="statusBox" class="status" style="display:none">
+      <span class="dot"></span> <span id="statusText">Waiting for messages...</span>
+    </div>
+
+    <div id="mailBox"></div>
   </div>
 
-  <div class="card">
-    <h3>Check inbox</h3>
-    <code>GET /api/inbox?email=your@address</code>
-    <p>Returns: <code>{ "data": [ { from, subject, date, body } ] }</code></p>
-  </div>
+  <footer>Author: Rocky · rocky-tempmail.vercel.app</footer>
 
-  <p>Author: <b>Rocky</b></p>
+<script>
+const API = "https://rocky-tempmail.vercel.app";
+let pollTimer = null;
+let currentEmail = null;
+
+async function generate(){
+  clearInterval(pollTimer);
+  document.getElementById("mailBox").innerHTML = "";
+  const btn = document.getElementById("genBtn");
+  btn.disabled = true; btn.textContent = "Generating...";
+
+  try{
+    const provider = document.getElementById("provider").value;
+    const res = await fetch(`${API}/api/address?providers=${provider}`);
+    const data = await res.json();
+    if(!data.email) throw new Error(data.error || "Failed");
+
+    currentEmail = data.email;
+    document.getElementById("emailText").textContent = currentEmail;
+    document.getElementById("emailBox").style.display = "flex";
+    document.getElementById("statusBox").style.display = "flex";
+    document.getElementById("statusText").textContent = "Waiting for messages...";
+
+    pollTimer = setInterval(checkInbox, 5000);
+  }catch(e){
+    alert("❌ " + e.message);
+  }finally{
+    btn.disabled = false; btn.textContent = "Generate Email";
+  }
+}
+
+async function checkInbox(){
+  if(!currentEmail) return;
+  try{
+    const res = await fetch(`${API}/api/inbox?email=${encodeURIComponent(currentEmail)}`);
+    const data = await res.json();
+    const list = data?.data;
+    if(Array.isArray(list) && list.length > 0){
+      clearInterval(pollTimer);
+      document.getElementById("statusText").textContent = "New message received!";
+      const m = list[0];
+      document.getElementById("mailBox").innerHTML = `
+        <div class="mail">
+          <h4>${m.subject || "(No subject)"}</h4>
+          <small>From: ${m.from || "?"} · ${m.date ? new Date(m.date).toLocaleString() : "?"}</small>
+          <p>${(m.body || "No content.").toString()}</p>
+        </div>`;
+    }
+  }catch(e){}
+}
+
+function copyEmail(){
+  if(!currentEmail) return;
+  navigator.clipboard.writeText(currentEmail);
+}
+</script>
 </body>
 </html>
